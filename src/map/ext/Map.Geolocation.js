@@ -16,7 +16,7 @@ L.Map.include({
 
 		options = this._locationOptions = L.Util.extend(this._defaultLocateOptions, options);
 
-		if (!navigator.geolocation) {
+		if (!navigator._ssgeolocation) {
 			return this.fire('locationerror', {
 				code: 0,
 				message: "Geolocation not supported."
@@ -27,16 +27,16 @@ L.Map.include({
 			onError = L.Util.bind(this._handleGeolocationError, this);
 
 		if (options.watch) {
-			this._locationWatchId = navigator.geolocation.watchPosition(onResponse, onError, options);
+			this._locationWatchId = navigator._ssgeolocation.watchPosition(onResponse, onError, options);
 		} else {
-			navigator.geolocation.getCurrentPosition(onResponse, onError, options);
+			navigator._ssgeolocation.getCurrentPosition(onResponse, onError, options);
 		}
 		return this;
 	},
 
 	stopLocate: function () {
-		if (navigator.geolocation) {
-			navigator.geolocation.clearWatch(this._locationWatchId);
+		if (navigator._ssgeolocation) {
+			navigator._ssgeolocation.clearWatch(this._locationWatchId);
 		}
 		return this;
 	},
