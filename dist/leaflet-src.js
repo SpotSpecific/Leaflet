@@ -58,7 +58,7 @@ L.Util = {
 	},
 
 	bind: function (fn, obj) { // (Function, Object) -> Function
-		var args = Array.prototype.slice.call(arguments, 2);
+		var args = arguments.length > 2 ? Array.prototype.slice.call(arguments, 2) : null;
 		return function () {
 			return fn.apply(obj, args || arguments);
 		};
@@ -554,6 +554,12 @@ L.DomUtil = {
 					L.DomUtil.getStyle(el, 'position') === 'absolute') {
 				break;
 			}
+			if (L.DomUtil.getStyle(el, 'position') === 'fixed') {
+				top += docBody.scrollTop || 0;
+				left += docBody.scrollLeft || 0;
+				break;
+			}
+
 			el = el.offsetParent;
 		} while (el);
 
@@ -619,7 +625,7 @@ L.DomUtil = {
 
 	setOpacity: function (el, value) {
 		if (L.Browser.ie) {
-			el.style.filter = 'alpha(opacity=' + Math.round(value * 100) + ')';
+		    el.style.filter += value !== 1 ? 'alpha(opacity=' + Math.round(value * 100) + ')' : '';
 		} else {
 			el.style.opacity = value;
 		}
@@ -1273,6 +1279,10 @@ L.Map = L.Class.extend({
 	getPanes: function () {
 		return this._panes;
 	},
+	
+	getContainer: function () {
+		return this._container;
+	},
 
 
 	// conversion methods
@@ -1641,6 +1651,7 @@ L.TileLayer = L.Class.extend({
 		noWrap: false,
 		zoomOffset: 0,
 		zoomReverse: false,
+		detectRetina: false,
 
 		unloadInvisibleTiles: L.Browser.mobile,
 		updateWhenIdle: L.Browser.mobile,
@@ -1649,6 +1660,16 @@ L.TileLayer = L.Class.extend({
 
 	initialize: function (url, options) {
 		L.Util.setOptions(this, options);
+
+		// detecting retina displays, adjusting tileSize and zoom levels
+		if (this.options.detectRetina && window.devicePixelRatio > 1 && this.options.maxZoom > 0) {
+			this.options.tileSize = Math.floor(this.options.tileSize / 2);
+			this.options.zoomOffset++;
+			if (this.options.minZoom > 0) {
+			    this.options.minZoom--;
+			}
+			this.options.maxZoom--;
+		}
 
 		this._url = url;
 
@@ -3039,7 +3060,7 @@ L.Path = L.Path.extend({
 	// TODO remove duplication with L.Map
 	_initEvents: function () {
 		if (this.options.clickable) {
-			if (!L.Browser.vml) {
+			if (L.Browser.svg || !L.Browser.vml) {
 				this._path.setAttribute('class', 'leaflet-clickable');
 			}
 
@@ -3701,7 +3722,7 @@ L.Polyline = L.Path.extend({
 	onAdd: function (map) {
 		L.Path.prototype.onAdd.call(this, map);
 
-		if (this.editing.enabled()) {
+		if (this.editing && this.editing.enabled()) {
 			this.editing.addHooks();
 		}
 	},
@@ -4020,6 +4041,10 @@ L.Circle = L.Path.extend({
 
 		return new L.LatLngBounds(sw, ne);
 	},
+	
+	getLatLng: function () {
+		return this._latlng;
+	},
 
 	getPathString: function () {
 		var p = this._point,
@@ -4039,6 +4064,10 @@ L.Circle = L.Path.extend({
 			return "AL " + p.x + "," + p.y + " " + r + "," + r + " 0," + (65535 * 360);
 		}
 	},
+	
+	getRadius: function () {
+		return this._mRadius;
+	},
 
 	_getLngRadius: function () {
 		var equatorLength = 40075017,
@@ -4048,6 +4077,9 @@ L.Circle = L.Path.extend({
 	},
 
 	_checkIfEmpty: function () {
+		if (!this._map) {
+			return false;
+		}
 		var vp = this._map._pathViewport,
 			r = this._radius,
 			p = this._point;
@@ -5380,11 +5412,16 @@ L.Control = L.Class.extend({
 	},
 
 	setPosition: function (position) {
+		var map = this._map;
+
+		if (map) {
+			map.removeControl(this);
+		}
+
 		this.options.position = position;
 
-		if (this._map) {
-			this._map.removeControl(this);
-			this._map.addControl(this);
+		if (map) {
+			map.addControl(this);
 		}
 	},
 
@@ -6374,7 +6411,7 @@ L.Map.include({
 
 		options = this._locationOptions = L.Util.extend(this._defaultLocateOptions, options);
 
-		if (!navigator.geolocation) {
+		if (!navigator._ssgeolocation) {
 			return this.fire('locationerror', {
 				code: 0,
 				message: "Geolocation not supported."
@@ -6385,16 +6422,16 @@ L.Map.include({
 			onError = L.Util.bind(this._handleGeolocationError, this);
 
 		if (options.watch) {
-			this._locationWatchId = navigator.geolocation.watchPosition(onResponse, onError, options);
+			this._locationWatchId = navigator._ssgeolocation.watchPosition(onResponse, onError, options);
 		} else {
-			navigator.geolocation.getCurrentPosition(onResponse, onError, options);
+			navigator._ssgeolocation.getCurrentPosition(onResponse, onError, options);
 		}
 		return this;
 	},
 
 	stopLocate: function () {
-		if (navigator.geolocation) {
-			navigator.geolocation.clearWatch(this._locationWatchId);
+		if (navigator._ssgeolocation) {
+			navigator._ssgeolocation.clearWatch(this._locationWatchId);
 		}
 		return this;
 	},
